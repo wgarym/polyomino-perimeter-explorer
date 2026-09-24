@@ -21,6 +21,13 @@ def recommended_screen_width(content_width: int, block_size: int) -> int:
     return max(20, min(100, fitted_width))
 
 
+def ordered_figures(
+    figures: Sequence[Matrix],
+    reverse_order: bool,
+) -> list[Matrix]:
+    return list(reversed(figures)) if reverse_order else list(figures)
+
+
 def pack_page(
     figures: Sequence[Matrix],
     start: int,
