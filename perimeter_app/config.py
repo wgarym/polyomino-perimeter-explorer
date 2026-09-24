@@ -3,7 +3,7 @@
 DATA_BASE_URL = "https://wgarym.github.io/perimeter"
 MIN_AREA = 4
 MAX_AREA = 16
-MAX_FILE_INDEX = 25
+MAX_FILE_INDEX = 53
 
 # Indexes correspond to area. Entries beyond MAX_AREA are retained from the
 # original notebook so future data can be enabled without changing the table.
