@@ -1,6 +1,11 @@
 import unittest
 
-from perimeter_app.display import pack_page, recommended_screen_width, render_page
+from perimeter_app.display import (
+    ordered_figures,
+    pack_page,
+    recommended_screen_width,
+    render_page,
+)
 
 
 class DisplayTests(unittest.TestCase):
@@ -13,6 +18,12 @@ class DisplayTests(unittest.TestCase):
         figures = [[[1] * 20]]
         page = pack_page(figures, 0, screen_width=5, screen_height=5)
         self.assertEqual((page.start, page.end), (0, 1))
+
+    def test_ordered_figures_can_reverse_without_changing_input(self):
+        figures = [[[1]], [[1, 1]], [[1, 1, 1]]]
+        self.assertEqual(ordered_figures(figures, False), figures)
+        self.assertEqual(ordered_figures(figures, True), list(reversed(figures)))
+        self.assertEqual(figures[0], [[1]])
 
     def test_page_respects_width(self):
         figures = [[[1]], [[1]], [[1]]]
