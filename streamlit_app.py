@@ -5,7 +5,12 @@ import streamlit as st
 from perimeter_app.config import MIN_AREA, MAX_AREA, normalize_perimeter, valid_perimeters
 from perimeter_app.content_width import get_content_width
 from perimeter_app.data import DatasetError, load_dataset
-from perimeter_app.display import pack_page, recommended_screen_width, render_page
+from perimeter_app.display import (
+    ordered_figures,
+    pack_page,
+    recommended_screen_width,
+    render_page,
+)
 from perimeter_app.figures import area as figure_area
 from perimeter_app.figures import find_figure, is_connected, parse_figure
 from perimeter_app.figures import perimeter as figure_perimeter
@@ -97,6 +102,7 @@ def initialize_state() -> None:
         "page_history": [],
         "active_signature": None,
         "active_layout": None,
+        "reverse_order": False,
         "search_status": None,
     }
     for key, value in defaults.items():
@@ -130,6 +136,12 @@ def jump_to_position(position_key: str, result_count: int) -> None:
     st.session_state.page_history = []
 
 
+def toggle_order() -> None:
+    st.session_state.reverse_order = not st.session_state.reverse_order
+    reset_navigation()
+    st.session_state.search_status = None
+
+
 def run_search() -> None:
     value = st.session_state.search_input.strip()
     if not value:
@@ -155,7 +167,10 @@ def run_search() -> None:
         return
 
     try:
-        figures = cached_dataset(target_area, target_perimeter)
+        figures = ordered_figures(
+            cached_dataset(target_area, target_perimeter),
+            st.session_state.reverse_order,
+        )
     except (DatasetError, ValueError) as exc:
         st.session_state.search_status = ("error", str(exc))
         return
@@ -219,6 +234,7 @@ with st.sidebar:
         on_change=run_search,
     )
     st.button("Search", on_click=run_search, use_container_width=True)
+    st.button("Reverse Order", on_click=toggle_order, use_container_width=True)
 
     st.header("Display")
     block_size = st.slider("Block size", 8, 24, 14, 1)
@@ -273,7 +289,10 @@ if st.session_state.search_status:
 
 try:
     with st.spinner("Loading figures..."):
-        figures = cached_dataset(selected_area, selected_perimeter)
+        figures = ordered_figures(
+            cached_dataset(selected_area, selected_perimeter),
+            st.session_state.reverse_order,
+        )
 except (DatasetError, ValueError) as exc:
     st.error(str(exc))
     st.stop()
