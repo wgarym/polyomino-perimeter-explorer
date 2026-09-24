@@ -3,6 +3,7 @@ import unittest
 from perimeter_app.config import (
     MIN_AREA,
     MAX_AREA,
+    MAX_FILE_INDEX,
     dataset_last_part,
     normalize_perimeter,
     perimeter_bounds,
@@ -35,6 +36,11 @@ class ConfigTests(unittest.TestCase):
     def test_dataset_part_mapping_matches_notebook(self):
         self.assertEqual(dataset_last_part(4, 8), 0)
         self.assertEqual(dataset_last_part(13, 28), 3)
+        self.assertEqual(
+            tuple(dataset_last_part(15, perimeter) for perimeter in range(16, 33, 2)),
+            (0, 0, 0, 0, 1, 4, 17, 40, 53),
+        )
+        self.assertEqual(MAX_FILE_INDEX, 53)
         self.assertEqual(dataset_last_part(16, 28), 24)
 
 
