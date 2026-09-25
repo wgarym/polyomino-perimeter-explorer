@@ -1,6 +1,7 @@
 """Dataset limits and valid area/perimeter combinations."""
 
 DATA_BASE_URL = "https://wgarym.github.io/perimeter"
+CANONICAL_DATA_BASE_URL = "https://wgarym.github.io/polyomino-canonical-data"
 MIN_AREA = 4
 MAX_AREA = 16
 MAX_FILE_INDEX = 53

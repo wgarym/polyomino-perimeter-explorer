@@ -4,6 +4,7 @@ from collections import deque
 from collections.abc import Iterable, Sequence
 
 Matrix = list[list[int]]
+RowMasks = list[int]
 
 
 def copy_matrix(matrix: Sequence[Sequence[int]]) -> Matrix:
@@ -167,6 +168,75 @@ def symmetries(matrix: Sequence[Sequence[int]]) -> Iterable[Matrix]:
             yield image
 
 
+def _outer_mass_profile(values: Sequence[int]) -> tuple[int, ...]:
+    """Compare a half, then progressively remove positions near the center."""
+    half = len(values) // 2
+    return tuple(sum(values[:count]) for count in range(half, 0, -1))
+
+
+def canonical_orientation_rank(matrix: Sequence[Sequence[int]]) -> tuple:
+    """Rank portrait orientations by left weight, bottom weight, then cells."""
+    column_totals = tuple(
+        sum(row[column] for row in matrix)
+        for column in range(len(matrix[0]))
+    )
+    row_totals = tuple(sum(row) for row in matrix)
+    left_profile = _outer_mass_profile(column_totals)
+    bottom_profile = _outer_mass_profile(tuple(reversed(row_totals)))
+    bottom_left_bitmap = tuple(
+        cell
+        for row in reversed(matrix)
+        for cell in row
+    )
+    return left_profile, bottom_profile, bottom_left_bitmap
+
+
+def canonical_figure(matrix: Sequence[Sequence[int]]) -> Matrix:
+    """Return one deterministic representative of a figure's symmetries."""
+    figure = trim_figure(matrix)
+    if not figure:
+        return []
+
+    candidates = [trim_figure(image) for image in symmetries(figure)]
+    portrait_candidates = [
+        candidate
+        for candidate in candidates
+        if len(candidate) >= len(candidate[0])
+    ]
+    return copy_matrix(max(portrait_candidates, key=canonical_orientation_rank))
+
+
+def canonical_sort_key(matrix: Sequence[Sequence[int]]) -> tuple:
+    """Return the stable wide-first display key for a canonical figure."""
+    width = len(matrix[0])
+    height = len(matrix)
+    bitmap = tuple(cell for row in matrix for cell in row)
+    return -width, height, bitmap
+
+
+def encode_row_masks(matrix: Sequence[Sequence[int]]) -> RowMasks:
+    """Encode a trimmed matrix as one integer bit mask per row."""
+    figure = trim_figure(matrix)
+    if not figure:
+        return []
+    width = len(figure[0])
+    return [
+        sum(cell << (width - column - 1) for column, cell in enumerate(row))
+        for row in figure
+    ]
+
+
+def decode_row_masks(row_masks: Sequence[int]) -> Matrix:
+    """Decode row masks whose highest used bit defines the figure width."""
+    if not row_masks or not any(row_masks):
+        return []
+    width = max(mask.bit_length() for mask in row_masks)
+    return [
+        [(mask >> (width - column - 1)) & 1 for column in range(width)]
+        for mask in row_masks
+    ]
+
+
 def find_figure(needle: Sequence[Sequence[int]], figures: Sequence[Matrix]) -> int:
     positions = {
         tuple(tuple(row) for row in figure): index
@@ -177,4 +247,3 @@ def find_figure(needle: Sequence[Sequence[int]], figures: Sequence[Matrix]) -> i
         if marker in positions:
             return positions[marker]
     return -1
-

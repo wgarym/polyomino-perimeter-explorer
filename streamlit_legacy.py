@@ -2,24 +2,17 @@
 
 import streamlit as st
 
-from perimeter_app.canonical_data import (
-    find_encoded_position,
-    load_collection_manifest,
-    load_data_part,
-    load_dataset_manifest,
-    load_figure_window,
-)
-from perimeter_app.config import MIN_AREA, MAX_AREA, normalize_perimeter
+from perimeter_app.config import MIN_AREA, MAX_AREA, normalize_perimeter, valid_perimeters
 from perimeter_app.content_width import get_content_width
-from perimeter_app.data import DatasetError
+from perimeter_app.data import DatasetError, load_dataset
 from perimeter_app.display import (
-    FigurePage,
+    ordered_figures,
     pack_page,
     recommended_screen_width,
     render_page,
 )
 from perimeter_app.figures import area as figure_area
-from perimeter_app.figures import canonical_figure, encode_row_masks, is_connected, parse_figure
+from perimeter_app.figures import find_figure, is_connected, parse_figure
 from perimeter_app.figures import perimeter as figure_perimeter
 
 st.set_page_config(
@@ -97,18 +90,8 @@ st.markdown(
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_collection():
-    return load_collection_manifest()
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def cached_manifest(area: int, perimeter: int):
-    return load_dataset_manifest(area, perimeter)
-
-
-@st.cache_resource(ttl=3600, max_entries=2, show_spinner=False)
-def cached_part(filename: str):
-    return load_data_part(filename)
+def cached_dataset(area: int, perimeter: int):
+    return load_dataset(area, perimeter)
 
 
 def initialize_state() -> None:
@@ -184,33 +167,18 @@ def run_search() -> None:
         return
 
     try:
-        collection = cached_collection()
-        if target_perimeter not in collection.perimeters(target_area):
-            st.session_state.search_status = (
-                "warning",
-                "No canonical dataset is available for that area and perimeter.",
-            )
-            return
-        manifest = cached_manifest(target_area, target_perimeter)
-        canonical = canonical_figure(figure)
-        canonical_position = find_encoded_position(
-            manifest,
-            encode_row_masks(canonical),
-            cached_part,
+        figures = ordered_figures(
+            cached_dataset(target_area, target_perimeter),
+            st.session_state.reverse_order,
         )
     except (DatasetError, ValueError) as exc:
         st.session_state.search_status = ("error", str(exc))
         return
 
-    if canonical_position < 0:
+    position = find_figure(figure, figures)
+    if position < 0:
         st.session_state.search_status = ("warning", "The figure was not found.")
         return
-
-    position = (
-        manifest.total - canonical_position - 1
-        if st.session_state.reverse_order
-        else canonical_position
-    )
 
     st.session_state.area = target_area
     st.session_state.selected_perimeter = target_perimeter
@@ -227,12 +195,6 @@ def run_search() -> None:
 initialize_state()
 content_width = get_content_width()
 
-try:
-    collection = cached_collection()
-except DatasetError as exc:
-    st.error(str(exc))
-    st.stop()
-
 with st.sidebar:
     st.header("Dataset")
     selected_area = st.slider(
@@ -242,10 +204,7 @@ with st.sidebar:
         key="area",
     )
 
-    perimeter_options = collection.perimeters(selected_area)
-    if not perimeter_options:
-        st.error("No canonical datasets are available for this area.")
-        st.stop()
+    perimeter_options = valid_perimeters(selected_area)
     perimeter_key = f"perimeter_area_{selected_area}"
     if perimeter_key not in st.session_state:
         st.session_state[perimeter_key] = normalize_perimeter(
@@ -329,46 +288,35 @@ if st.session_state.search_status:
     getattr(st, status_type)(status_message)
 
 try:
-    manifest = cached_manifest(selected_area, selected_perimeter)
+    with st.spinner("Loading figures..."):
+        figures = ordered_figures(
+            cached_dataset(selected_area, selected_perimeter),
+            st.session_state.reverse_order,
+        )
 except (DatasetError, ValueError) as exc:
     st.error(str(exc))
     st.stop()
 
-if manifest.total <= 0:
+if not figures:
     st.info("No solutions are available for this area and perimeter.")
     st.stop()
 
 st.session_state.current_position = max(
     0,
-    min(st.session_state.current_position, manifest.total - 1),
+    min(st.session_state.current_position, len(figures) - 1),
 )
-
-window_size = max(512, screen_width * screen_height)
-try:
-    with st.spinner("Loading figures..."):
-        figures = load_figure_window(
-            manifest,
-            st.session_state.current_position,
-            st.session_state.reverse_order,
-            window_size,
-            cached_part,
-        )
-except DatasetError as exc:
-    st.error(str(exc))
-    st.stop()
-
-local_page = pack_page(figures, 0, screen_width, screen_height)
-page = FigurePage(
-    rows=local_page.rows,
-    start=st.session_state.current_position,
-    end=st.session_state.current_position + local_page.end,
+page = pack_page(
+    figures,
+    st.session_state.current_position,
+    screen_width,
+    screen_height,
 )
 
 st.markdown(
     '<div class="result-summary">'
     f'<strong>Area {selected_area}</strong>'
     f'<strong>Perimeter {selected_perimeter}</strong>'
-    f'<span>{manifest.total:,} solutions</span>'
+    f'<span>{len(figures):,} solutions</span>'
     f'<span>Showing {page.start + 1:,} to {page.end:,}</span>'
     "</div>",
     unsafe_allow_html=True,
@@ -389,19 +337,19 @@ with position_column:
         st.number_input(
             "Starting position",
             min_value=1,
-            max_value=manifest.total,
+            max_value=len(figures),
             value=page.start + 1,
             step=1,
             label_visibility="collapsed",
             key=position_key,
             on_change=jump_to_position,
-            args=(position_key, manifest.total),
+            args=(position_key, len(figures)),
         )
     with go_column:
         st.button(
             "Go",
             on_click=jump_to_position,
-            args=(position_key, manifest.total),
+            args=(position_key, len(figures)),
             use_container_width=True,
         )
 with next_column:
@@ -409,7 +357,7 @@ with next_column:
         "Next Page",
         on_click=go_next,
         args=(page.end,),
-        disabled=page.end >= manifest.total,
+        disabled=page.end >= len(figures),
         use_container_width=True,
     )
 
